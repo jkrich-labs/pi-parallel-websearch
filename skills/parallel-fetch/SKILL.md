@@ -1,3 +1,8 @@
+---
+name: parallel-fetch
+description: Use when you already know the exact URL(s) and want their content as clean, LLM-ready text — articles, docs, PDFs, JS-heavy pages. Calls web_fetch (Parallel Extract API): 1-20 URLs batched in one call, focused excerpts via objective, or full page markdown. For many structured records from one listing page use parallel-extract instead.
+---
+
 # parallel-fetch
 
 Use when the user gives a URL (or you already have one from web_search) and wants the page's content as clean, LLM-ready text — via the Parallel Extract API.

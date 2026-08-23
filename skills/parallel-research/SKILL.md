@@ -1,3 +1,8 @@
+---
+name: parallel-research
+description: ONLY when the user explicitly wants a thorough, exhaustive, multi-source investigation or report that can run for minutes — due diligence, market landscapes, multi-company comparisons, verified fact-finding. Calls web_research (Parallel Task API): processor lite/base/core (default)/pro/ultra, optional output_schema, per-field citations. For normal lookups use parallel-search.
+---
+
 # parallel-research
 
 Use ONLY when the user explicitly wants a thorough, exhaustive, minutes-long multi-source investigation or report — due diligence, market landscapes, multi-company comparisons, verified fact-finding. Runs on the Parallel Task API.
