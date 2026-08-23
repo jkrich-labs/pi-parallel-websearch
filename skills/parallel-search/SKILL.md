@@ -1,6 +1,6 @@
 ---
 name: parallel-search
-description: DEFAULT for any web lookup, research, or question needing current or verifiable information — company research, news, pricing, facts, verification, code/docs. Use web_search (Parallel Search API). Teaches how to choose the mode (fast default / turbo / advanced), write 2-3 keyword search_queries plus an objective, and use domain/date filters. Preserve the returned URLs when citing results.
+description: "DEFAULT for any web lookup, research, or question needing current or verifiable information — company research, news, pricing, facts, verification, code/docs. Use web_search (Parallel Search API). Teaches how to choose the mode (fast default / turbo / advanced), write 2-3 keyword search_queries plus an objective, and use domain/date filters. Preserve the returned URLs when citing results."
 ---
 
 # parallel-search

@@ -1,6 +1,6 @@
 ---
 name: parallel-workflow
-description: Use when someone has a business goal rather than a single query — "how can I use the web tools?", "enrich my leads", "build a competitor tracker", "research before my meeting", "vet this vendor". Turns the goal into a multi-step Parallel workflow (which tool, which call, what feeds the next step), with 12 ready-made recipes.
+description: "Use when someone has a business goal rather than a single query — \"how can I use the web tools?\", \"enrich my leads\", \"build a competitor tracker\", \"research before my meeting\", \"vet this vendor\". Turns the goal into a multi-step Parallel workflow (which tool, which call, what feeds the next step), with 12 ready-made recipes."
 ---
 
 # parallel-workflow

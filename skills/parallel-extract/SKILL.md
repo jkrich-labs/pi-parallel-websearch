@@ -1,6 +1,6 @@
 ---
 name: parallel-extract
-description: Use when the user wants many structured records (team, catalog, jobs, speakers, products) from ONE known listing page. Calls web_extract (Parallel Task API): verify a single-row JSON schema, describe the fields, returns NDJSON rows with field-level citations. For a single page's prose use parallel-fetch; for discovery use parallel-search.
+description: "Use when the user wants many structured records (team, catalog, jobs, speakers, products) from ONE known listing page. Calls web_extract (Parallel Task API): verify a single-row JSON schema, describe the fields, returns NDJSON rows with field-level citations. For a single page's prose use parallel-fetch; for discovery use parallel-search."
 ---
 
 # parallel-extract
