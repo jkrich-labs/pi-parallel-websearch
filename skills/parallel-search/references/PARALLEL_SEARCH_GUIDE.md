@@ -4,12 +4,14 @@ Derived from https://docs.parallel.ai/search/* (Search API quickstart, best prac
 
 ## Modes
 
-| Mode      | Latency   | Cost                        | Quality (AA index) | Best for                                    |
-| --------- | --------- | --------------------------- | ------------------- | ------------------------------------------- |
-| `turbo`   | ~250ms    | $1 / 1,000 requests         | basic              | Voice/chat agents, autocomplete, simple lookups |
-| `fast`    | ~700ms    | $1 / 1,000 requests         | 73 (#3)            | **Most agents** (default): support, Q&A, general search |
-| `basic`   | ~1s       | $5 / 1,000 requests         | mid                | Legacy tier; deeper context per call        |
-| `advanced`| ~3s       | $5 / 1,000 requests         | 75 (#1)            | Background agents, investigations, code review, deep synthesis |
+| Mode      | Latency    | Cost                   | Quality                | Best for                                   |
+| --------- | ---------- | ---------------------- | ---------------------- | ------------------------------------------ |
+| `turbo`   | ~200ms     | $1 / 1,000 requests    | low                    | Latency-critical, high-volume (chat, RAG pre-filter); **EN/JA only** |
+| `fast`    | ~700ms (<1s) | $1 / 1,000 requests    | high                   | **Most agents** (default): support, Q&A, general search; best speed/cost/quality balance |
+| `basic`   | ~1s        | $5 / 1,000 requests    | high, deeper context   | Most agent workloads (docs' "start with basic"); 2-3 high-quality queries |
+| `advanced`| ~3s        | $5 / 1,000 requests    | highest (Parallel #1 on AA Search Index) | Multi-hop background agents, investigations, code review, deep synthesis |
+
+> The Search API defaults to `advanced` when `mode` is unset; this extension pins `fast` as the agent default (cheaper and faster than `basic`/`advanced` at comparable quality). `turbo` is only EN/JA.
 
 Cost formula (`fast`/`turbo`): `$0.001 per request + $0.001 per additional page result beyond 10`. Default 10 results; the extension's default is 8 to trim context at no cost.
 

@@ -14,10 +14,10 @@
  *   web_extract  -> POST /v1/tasks/runs (structured rows from a listing page)
  *
  * Cost/performance posture (vs Linkup defaults):
- *   - search mode defaults to `fast` (~700ms, $1/1k reqs, #3 on Artificial
- *     Analysis Search Index at 73/75) — the documented best balance for agent
- *     workflows; `advanced` ($5/1k, ~3s, #1) only when depth beats latency;
- *     `turbo` (~250ms, $1/1k) when latency alone matters.
+ *   - search mode defaults to `fast` (~700ms, $1/1k reqs) — the balance Parallel
+ *     documents as best for most agents (it ranked #1 on the Artificial Analysis
+ *     Search Index in Aug 2026); `basic`/`advanced` ($5/1k) when depth beats
+ *     latency; `turbo` (~200ms, $1/1k) when latency alone matters (EN/JA only).
  *   - web_answer defaults to reasoning effort `low` ($10/1k, ~5-10s) instead of
  *     research-grade pricing; medium/high are opt-in.
  *   - web_research maps reasoning depth to Task processors: S->lite ($5),
@@ -308,7 +308,7 @@ const webSearchParams = Type.Object({
 			objective: Type.Optional(
 				Type.String({ description: "Natural-language description of the underlying question/goal driving the search; focuses results on the most relevant content" }),
 			),
-			mode: Type.Optional(StringEnum(["turbo", "fast", "basic", "advanced"] as const, { description: "Search mode: turbo (~250ms, $1/1k, latency-critical) / fast (~700ms, $1/1k, default) / basic (~1s, $5/1k) / advanced (~3s, $5/1k, highest quality)" })),
+			mode: Type.Optional(StringEnum(["turbo", "fast", "basic", "advanced"] as const, { description: "Search mode: turbo (~200ms, $1/1k, latency-critical; EN/JA only) / fast (~700ms, $1/1k, default — best speed/cost/quality balance) / basic (~1s, $5/1k) / advanced (~3s, $5/1k, highest quality)" })),
 			max_results: Type.Optional(Type.Number({ description: "Max results to return, 1-20 (default 8)" })),
 			include_domains: Type.Optional(Type.Array(Type.String(), { description: "Only search these domains (exact domains or bare TLDs like .gov; combined with exclude_domains max 200)" })),
 			exclude_domains: Type.Optional(Type.Array(Type.String(), { description: "Exclude these domains from results" })),
@@ -1053,7 +1053,7 @@ export default function (pi: ExtensionAPI) {
 		label: "Web Search",
 		description:
 			"Search the live web via the Parallel Search API — the DEFAULT web search tool. Returns ranked results with LLM-optimized excerpts and URLs to cite. " +
-			"mode: turbo (~250ms, $1/1k, latency-critical) / fast (~700ms, $1/1k, default — best balance, #3 quality on Artificial Analysis) / basic (~1s, $5/1k) / advanced (~3s, $5/1k, #1 quality). " +
+			"mode: turbo (~200ms, $1/1k, latency-critical; EN/JA only) / fast (~700ms, $1/1k, default — best balance of speed/cost/quality; Parallel ranked #1 on the Artificial Analysis Search Index) / basic (~1s, $5/1k) / advanced (~3s, $5/1k, highest quality). " +
 			"search_queries: 1-5 concise keyword queries (2-3 for best results), plus an optional objective describing the underlying goal. " +
 			"Filters: include_domains/exclude_domains for exact known target domains, after_date for freshness, location for geo-targeting. " +
 			"Preserve the returned URLs when presenting answers.",

@@ -10,9 +10,9 @@ Use when someone wants a web lookup, current info, a fact check, source discover
 ## When to use
 
 - **Default for any web lookup** needing current or verifiable information (news, prices, docs, people, companies, releases, benchmarks).
-- `mode: fast` (default) for most agent workflows — ~700ms, $1/1k requests, quality score 73/100 on the Artificial Analysis Search Index.
-- `mode: turbo` when latency alone matters (high-volume simple lookups, ~250ms, $1/1k).
-- `mode: advanced` only when quality beats latency (~3s, $5/1k, #1 quality 75/100) — background agents, investigations, deep synthesis.
+- `mode: fast` (default) for most agent workflows — ~700ms, $1/1k requests; Parallel's documented best balance of speed/cost/quality for agents (ranked #1 on the Artificial Analysis Search Index).
+- `mode: turbo` when latency alone matters (high-volume simple lookups, ~200ms, $1/1k; note it is EN/JA only).
+- `mode: advanced` only when quality beats latency (~3s, $5/1k, highest quality) — background agents, investigations, deep synthesis.
 - `web_answer` when the user needs a synthesized cited answer in seconds instead of sources to read.
 - `web_research` when the user explicitly wants a minutes-long, exhaustive investigation.
 

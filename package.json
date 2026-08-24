@@ -1,7 +1,7 @@
 {
   "name": "@jkrich-labs/pi-parallel-websearch",
-  "version": "1.1.0",
-  "description": "Parallel web search for pi: web_search, web_fetch, web_answer, web_research, web_extract tools plus auto-loading parallel-search/fetch/research/extract/workflow skills. Cost-optimized defaults (search mode=basic, answer effort=low).",
+  "version": "1.1.1",
+  "description": "Parallel web search for pi: web_search, web_fetch, web_answer, web_research, web_extract tools plus auto-loading parallel-search/fetch/research/extract/workflow skills. Cost-optimized defaults (search mode=fast, answer effort=low).",
   "keywords": [
     "pi-package",
     "parallel",
