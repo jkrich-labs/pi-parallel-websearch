@@ -47,7 +47,7 @@ Append `-fast` for faster variants (same price). Only successfully completed run
 
 ## Notes
 
-- The tool blocks until completion, then streams the result with citations. If it times out in the tool, the run continues server-side — you can re-poll later by run id.
+- The tool polls the result with short per-request timeouts (SDK `taskRun.result` with `timeout: 25`) instead of one long-blocking call, then returns the result with citations. If it times out within the tool, the run still continues server-side — you can re-poll later by run id.
 - Failed runs are not billed; failures return the run's error message.
 
 ## Knowledge

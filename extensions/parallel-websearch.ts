@@ -46,6 +46,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { Type } from "typebox";
+import Parallel from "parallel-web";
 
 const BASE = "https://api.parallel.ai";
 const PLATFORM_ORIGIN = "https://platform.parallel.ai";
@@ -239,36 +240,42 @@ interface ParallelFields {
 	incomplete_details?: unknown;
 }
 
-async function parallelRequest(
+/** Map SDK errors to the same friendly messages the raw-fetch path produced. */
+function sdkErrorMsg(e: unknown): string {
+	if (!(e instanceof Error)) return String(e);
+	const err = e as { status?: number; message?: string };
+	if (err.status === 401 || err.status === 403) {
+		return "Parallel rejected the API key. Update ~/.pi/agent/auth.json (parallel key) or PARALLEL_API_KEY.";
+	}
+	if (err.status === 429) return "Parallel rate limit hit. Wait and retry.";
+	return err.message || String(e);
+}
+
+/**
+ * Perform a generic Parallel API request through the official SDK transport.
+ * The SDK handles auth headers, retries, timeouts, abort signals, and typed
+ * error classes (APIError / APIConnectionError / ...), replacing the hand-written
+ * raw `fetch` shim that previously died on long-blocking calls ("fetch failed").
+ * Response parsing stays tool-specific because the SDK ships typed resources only
+ * for the Task API; Search / Extract / Responses use this generic path.
+ */
+async function sdkRequest<T = Record<string, unknown>>(
 	method: "GET" | "POST",
 	path: string,
-	apiKey: string,
 	body: unknown,
-	signal: AbortSignal | undefined,
-	ms: number,
-): Promise<Record<string, unknown>> {
-	const headers: Record<string, string> = {
-		"x-api-key": apiKey,
-		"X-Tool-Calling-Package": "pi-parallel-websearch",
+	apiKey: string,
+	opts: { signal?: AbortSignal; ms: number; query?: Record<string, unknown> },
+): Promise<T> {
+	const client = parallelClient(apiKey);
+	const call = method === "GET" ? client.get.bind(client) : client.post.bind(client);
+	const requestOpts: Record<string, unknown> = {
+		signal: opts.signal,
+		timeout: opts.ms,
+		headers: { "X-Tool-Calling-Package": "pi-parallel-websearch" },
 	};
-	if (body !== undefined) headers["Content-Type"] = "application/json";
-	const response = await fetch(`${BASE}${path}`, {
-		method,
-		headers,
-		body: body === undefined ? undefined : JSON.stringify(body),
-		signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms),
-	});
-	if (!response.ok) {
-		const bodyText = await response.text().catch(() => "");
-		let detail = bodyText.slice(0, 500);
-		if (response.status === 401 || response.status === 403) {
-			detail = "Parallel rejected the API key. Update ~/.pi/agent/auth.json (parallel key) or PARALLEL_API_KEY.";
-		} else if (response.status === 429) {
-			detail = "Parallel rate limit hit. Wait and retry.";
-		}
-		throw new Error(`Parallel error (${response.status}): ${detail}`);
-	}
-	return (await response.json()) as Record<string, unknown>;
+	if (method === "POST") requestOpts["body"] = body;
+	if (opts.query) requestOpts["query"] = opts.query;
+	return (await call(path, requestOpts)) as T;
 }
 
 // ---------------------------------------------------------------------------
@@ -396,9 +403,9 @@ async function parallelSearch(query: SearchOpts): Promise<string> {
 
 	let data: ParallelFields;
 	try {
-		data = (await parallelRequest("POST", "/v1/search", apiKey, payload, query.signal, timeoutMs())) as ParallelFields;
+		data = await sdkRequest<ParallelFields>("POST", "/v1/search", payload, apiKey, { signal: query.signal, ms: timeoutMs() });
 	} catch (e) {
-		return `Error searching: ${e instanceof Error ? e.message : String(e)}`;
+		return `Error searching: ${sdkErrorMsg(e)}`;
 	}
 
 	const results = (data.results ?? []) as WebResult[];
@@ -452,9 +459,9 @@ async function parallelFetch(opts: FetchOpts): Promise<string> {
 
 	let data: ParallelFields;
 	try {
-		data = (await parallelRequest("POST", "/v1/extract", apiKey, payload, opts.signal, timeoutMs())) as ParallelFields;
+		data = await sdkRequest<ParallelFields>("POST", "/v1/extract", payload, apiKey, { signal: opts.signal, ms: timeoutMs() });
 	} catch (e) {
-		return `Error fetching: ${e instanceof Error ? e.message : String(e)}`;
+		return `Error fetching: ${sdkErrorMsg(e)}`;
 	}
 
 	const results = (data.results ?? []) as WebResult[];
@@ -526,9 +533,9 @@ async function parallelAnswer(opts: AnswerOpts): Promise<string> {
 
 	let data: ParallelFields;
 	try {
-		data = (await parallelRequest("POST", "/v1/responses", apiKey, payload, opts.signal, Math.max(timeoutMs(), 90_000))) as ParallelFields;
+		data = await sdkRequest<ParallelFields>("POST", "/v1/responses", payload, apiKey, { signal: opts.signal, ms: Math.max(timeoutMs(), 90_000) });
 	} catch (e) {
-		return `Error getting an answer: ${e instanceof Error ? e.message : String(e)}`;
+		return `Error getting an answer: ${sdkErrorMsg(e)}`;
 	}
 
 	const err = data.error;
@@ -629,6 +636,20 @@ function fmtBasis(basis: Array<Record<string, unknown>> | undefined, snippetChar
 	return lines.join("\n");
 }
 
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Lazy Parallel SDK client, cached per resolved API key so repeated task calls in
+// a session reuse one instance (the SDK holds no mutable per-call state).
+let sdkClient: { key: string; client: Parallel } | undefined;
+function parallelClient(apiKey: string): Parallel {
+	if (!sdkClient || sdkClient.key !== apiKey) {
+		sdkClient = { key: apiKey, client: new Parallel({ apiKey }) };
+	}
+	return sdkClient.client;
+}
+
 async function parallelResearch(opts: ResearchOpts): Promise<string> {
 	const apiKey = (await resolveApiKey({}))?.key;
 	if (!apiKey) return missingKeyMessage();
@@ -637,27 +658,27 @@ async function parallelResearch(opts: ResearchOpts): Promise<string> {
 	const input = opts.prompt.trim();
 	if (!input) return "web_research: prompt is required.";
 
-	const payload: Record<string, unknown> = { processor, input };
+	const createParams: Record<string, unknown> = { processor, input };
 	if (opts.outputSchema !== undefined) {
 		const schema = schemaToObject(opts.outputSchema);
 		if (schema) {
-			payload["task_spec"] = { output_schema: { type: "json", json_schema: schema } };
+			createParams["task_spec"] = { output_schema: { type: "json", json_schema: schema } };
 		} else if (typeof opts.outputSchema === "string" && !isJsonSchemaString(opts.outputSchema)) {
-			payload["task_spec"] = { output_schema: { type: "text", description: opts.outputSchema } };
-		} else {
-			payload["task_spec"] = { output_schema: { type: "auto" } };
+			createParams["task_spec"] = { output_schema: { type: "text", description: opts.outputSchema } };
 		}
+		// Otherwise omit task_spec entirely => the API's auto output schema.
 	}
 	const sourcePolicy: Record<string, unknown> = {};
 	if (opts.includeDomains?.length) sourcePolicy["include_domains"] = opts.includeDomains.slice(0, 200);
 	if (opts.excludeDomains?.length) sourcePolicy["exclude_domains"] = opts.excludeDomains.slice(0, 200);
 	if (opts.afterDate) sourcePolicy["after_date"] = opts.afterDate;
-	if (Object.keys(sourcePolicy).length > 0) payload["source_policy"] = sourcePolicy;
-	payload["metadata"] = { source: "pi-parallel-websearch" };
+	if (Object.keys(sourcePolicy).length > 0) createParams["source_policy"] = sourcePolicy;
+	createParams["metadata"] = { source: "pi-parallel-websearch" };
 
+	const client = parallelClient(apiKey);
 	let created: ParallelFields;
 	try {
-		created = (await parallelRequest("POST", "/v1/tasks/runs", apiKey, payload, opts.signal, 60_000)) as ParallelFields;
+		created = (await client.taskRun.create(createParams)) as unknown as ParallelFields;
 	} catch (e) {
 		return `Error submitting research task: ${e instanceof Error ? e.message : String(e)}`;
 	}
@@ -666,29 +687,49 @@ async function parallelResearch(opts: ResearchOpts): Promise<string> {
 	if (!runId) return `Parallel task returned no run_id: ${JSON.stringify(created)}`;
 
 	const maxWaitMs = clampInt(opts.maxWaitMinutes, waitMinutesFor(processor), 1, 120) * 60_000;
-	opts.onUpdate?.(`web_research: submitted run ${runId} (processor=${processor}); fetching result — up to ${Math.round(maxWaitMs / 60000)} min`);
+	const start = Date.now();
+	const deadline = start + maxWaitMs;
+	opts.onUpdate?.(`web_research: submitted run ${runId} (processor=${processor}); polling for result — up to ${Math.round(maxWaitMs / 60000)} min`);
 
-	// The result endpoint blocks server-side until the run completes (or times out),
-	// which is cheaper and simpler than client-side polling.
-	let done: ParallelFields;
-	try {
-		done = (await parallelRequest(
-			"GET",
-			`/v1/tasks/runs/${encodeURIComponent(runId)}/result?timeout=${Math.round(maxWaitMs / 1000)}`,
-			apiKey,
-			undefined,
-			opts.signal,
-			maxWaitMs + 30_000,
-		)) as ParallelFields;
-	} catch (e) {
-		const msg = e instanceof Error ? e.message : String(e);
-		if (/timeout|abort/i.test(msg)) {
-			return (
-				`web_research: run ${runId} (processor=${processor}) did not finish within ${Math.round(maxWaitMs / 60000)} min. ` +
-				`Fetch it later with: GET ${BASE}/v1/tasks/runs/${runId}/result`
-			);
+	// Poll the result endpoint with a SHORT per-request timeout instead of one
+	// long-blocking request. The SDK maps `timeout` to the ?timeout= query, so the
+	// server blocks only that long and returns 408 "Run still active" while the
+	// run is in flight. This avoids the single blocking request that Node's fetch
+	// aborts at ~300s ("fetch failed") and turns the 408 into a keep-waiting signal
+	// rather than a hard tool error.
+	const perReqSeconds = envInt("PI_PARALLEL_RESULT_TIMEOUT", 25);
+	let done: ParallelFields | undefined;
+	let lastErr = "";
+	let lastProgress = 0;
+	while (Date.now() < deadline) {
+		if (opts.signal?.aborted) return `web_research: run ${runId} was aborted.`;
+		try {
+			done = (await client.taskRun.result(runId, { timeout: perReqSeconds }, { signal: opts.signal, maxRetries: 0 })) as unknown as ParallelFields;
+			break;
+		} catch (e) {
+			lastErr = e instanceof Error ? e.message : String(e);
+			if (opts.signal?.aborted) return `web_research: run ${runId} was aborted.`;
+			const status = (e as { status?: number }).status;
+			// Terminal (non-retryable) API errors: the run is done but unusable.
+			if (typeof status === "number" && [400, 401, 403, 404, 422].includes(status)) {
+				return `Error fetching research result: ${lastErr}`;
+			}
+			// 408 "Run still active", 429, 5xx, connection/timeout errors: keep waiting.
+			const now = Date.now();
+			if (now - lastProgress > 30_000) {
+				lastProgress = now;
+				opts.onUpdate?.(`web_research: run ${runId} still running (${Math.round((now - start) / 1000)}s elapsed).`);
+			}
+			await sleep(Math.min(1500, Math.max(250, Math.ceil((deadline - Date.now()) / 40))));
 		}
-		return `Error fetching research result: ${msg}`;
+	}
+
+	if (!done) {
+		return (
+			`web_research: run ${runId} (processor=${processor}) did not finish within ${Math.round(maxWaitMs / 60000)} min` +
+			`${lastErr ? ` (last error: ${lastErr})` : ""}.` +
+			`\nThe run continues server-side; fetch it later with: GET ${BASE}/v1/tasks/runs/${runId}/result`
+		);
 	}
 
 	const run = (done.run ?? {}) as ParallelFields;
@@ -738,9 +779,13 @@ async function parallelExtractRows(opts: ExtractOpts): Promise<string> {
 	// strict output). Without one, omit task_spec entirely — that is what the
 	// API treats as an auto output schema — and we format whichever
 	// array-of-objects the task returns as rows.
-	const outputSchema: unknown | undefined =
+	// Pass the raw `rows`-array schema to parallelResearch, which wraps it into
+	// { output_schema: { type: "json", json_schema } } exactly once. (Web_extract
+	// used to pre-wrap it, double-wrapping into a nested `type:"json"` that the API
+	// rejected with a 422 — "Root type must be 'object', not 'json'.")
+	const rowsSchema: unknown | undefined =
 		rowSchema && typeof rowSchema === "object"
-			? { type: "json", json_schema: { type: "object", properties: { rows: { type: "array", items: rowSchema } }, required: ["rows"] } }
+			? { type: "object", properties: { rows: { type: "array", items: rowSchema } }, required: ["rows"] }
 			: undefined;
 
 	const description = opts.description?.trim();
@@ -751,7 +796,7 @@ async function parallelExtractRows(opts: ExtractOpts): Promise<string> {
 	const out = await parallelResearch({
 		prompt: input,
 		processor: opts.processor ?? envStr("PI_PARALLEL_EXTRACT_PROCESSOR", "base"),
-		outputSchema,
+		outputSchema: rowsSchema,
 		maxWaitMinutes: opts.maxWaitMinutes,
 		signal: opts.signal,
 		onUpdate: (t) => opts.onUpdate?.(`web_extract (${url}): ${t.replace(/^web_research: /, "")}`),

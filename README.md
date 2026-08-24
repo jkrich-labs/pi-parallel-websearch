@@ -27,7 +27,7 @@ Get a key at [platform.parallel.ai](https://platform.parallel.ai).
 | `web_search` | `POST /v1/search` | Default web search. `mode`: `fast` (default — ~700ms, $1/1k, #3 quality) / `turbo` (~250ms, $1/1k) / `basic` (~1s, $5/1k) / `advanced` (~3s, $5/1k, #1 quality). `search_queries` (1-5) + `objective`, domain/date/location filters. |
 | `web_fetch` | `POST /v1/extract` | 1-20 known URLs → clean markdown / focused excerpts. `full_content` defaults on. `objective`/`search_queries` focus excerpts. |
 | `web_answer` | `POST /v1/responses` | Grounded, cited answer to a specific question in seconds. `reasoning_effort`: `low` (default, ~5-10s, $10/1k) / `medium` / `high`. Optional `structured_output_schema` for JSON. |
-| `web_research` | `POST /v1/tasks/runs` + result | Minutes-long multi-source investigations. `processor`: `lite` ($5) / `base` ($10) / `core` (default, $25) / `pro` ($100) / `ultra` ($300 per 1k runs); `-fast` variants. Optional `output_schema`. |
+| `web_research` | `POST /v1/tasks/runs` + result | Minutes-long multi-source investigations. `processor`: `lite` ($5) / `base` ($10) / `core` (default, $25) / `pro` ($100) / `ultra` ($300 per 1k runs); `-fast` variants. Optional `output_schema`. Polls the result with short timeouts (see `PI_PARALLEL_RESULT_TIMEOUT`) rather than one long-blocking request.
 | `web_extract` | Task API (rows output) | Bulk structured rows (NDJSON) from one known listing page. `schema` (single-row JSON Schema) recommended; `processor` `base` default. |
 
 All tools return compact, citation-preserving markdown (never raw JSON dumps) and report expected failures as readable strings.
@@ -56,12 +56,13 @@ Auto-load when a task matches: `parallel-search` (default web lookup), `parallel
 | `PI_PARALLEL_EXTRACT_PROCESSOR` | `base` | Default extract processor |
 | `PI_PARALLEL_RESPONSE_EFFORT` | `low` | Default answer effort |
 | `PI_PARALLEL_TIMEOUT` | `60` | Sync call timeout (s) |
+| `PI_PARALLEL_RESULT_TIMEOUT` | `25` | Per-poll server-side block (s) for `web_research`/`web_extract` result — the tool polls with short requests instead of one long blocking call |
 | `PI_PARALLEL_MAX_OUTPUT` | `20000` | Tool output cap (chars) |
 | `PI_PARALLEL_RESEARCH_MAX_OUTPUT` | `60000` | Research/extract output cap (chars) |
 
 ## Development
 
-- `extensions/parallel-websearch.ts` — the extension (registerTool × 5, provider auth, `/parallel-login` status command, grounding prompt hook). Zero runtime npm deps (only pi-bundled peer deps: `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, `typebox`).
+- `extensions/parallel-websearch.ts` — the extension (registerTool × 5, provider auth, `/parallel-login` status command, grounding prompt hook). Uses the official [`parallel-web`](https://www.npmjs.com/package/parallel-web) SDK: the Task API run lifecycle (`taskRun.create` + short-timeout `taskRun.result` polling) for deep research and extract, and the SDK's HTTP transport for search / fetch / answer. Runtime deps are `parallel-web` plus the pi-bundled peer deps (`@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, `typebox`).
 - `skills/` — self-contained skills with bundled knowledge references, derived from [Parallel's docs](https://docs.parallel.ai/llms.txt).
 
 ## License
